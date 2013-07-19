@@ -1,36 +1,37 @@
 ﻿(function ($) {
-    var mkObj = function (key, value) {
+    var mkObj = function(key, value) {
         var obj = {};
         obj[key] = value;
         return obj;
-    }
+    };
     
-    var isSurfaceTablet = 'onmsgesturechange' in window && navigator.msPointerEnabled;    //Only works if using IE10+
-    var toFix = ['touchstart', 'mspointerdown', 'touchmove', 'mspointermove', 'touchend', 'onmspointerup'];
+    var toFix = ['touchstart', 'mspointerdown', 'touchmove', 'mspointermove', 'touchend', 'mspointerup'];
     var touch = {
-        start: mkObj('onmspointerdown' in document ? 'mspointerdown' : 'touchstart', startHandler),
-        move: mkObj('onmspointerdown' in document ? 'mspointermove' : 'touchmove', moveHandler),
-        end: mkObj('onmspointerdown' in document ? 'mspointerup' : 'touchend', endHandler)
+        start: mkObj(navigator.msPointerEnabled ? 'mspointerdown' : 'touchstart', startHandler),
+        move: mkObj(navigator.msPointerEnabled ? 'mspointermove' : 'touchmove', moveHandler),
+        end: mkObj(navigator.msPointerEnabled ? 'mspointerup' : 'touchend', endHandler)
     };
     
     var touchStart;
 
-    if ($.event.fixHooks) {
-        for (var i = toFix.length; i;) {
-            $.event.fixHooks[toFix[--i]] = $.event.mouseHooks;
-        }
-    }
+    //if ($.event.fixHooks) {
+    //    for (var i = toFix.length; i;) {
+    //        $.event.fixHooks[toFix[--i]] = $.event.mouseHooks;
+    //    }
+    //}
 
     var eventHelper = {
         setup: function (events, context) {
             context = context || this;
-            
+
             for (var name in events) {
-                if (context.addEventListener) {
-                    context.addEventListener(name, events[name], false);
-                } else {
-                    context['on' + name] = events[name];
-                }
+                $(context).bind(name, events[name]);
+                
+                //if (context.addEventListener) {
+                //    context.addEventListener(name, events[name], false);
+                //} else {
+                //    context['on' + name] = events[name];
+                //}
             }
         },
 
@@ -38,11 +39,13 @@
             context = context || this;
 
             for (var name in events) {
-                if (context.removeEventListener) {
-                    context.removeEventListener(name, events[name], false);
-                } else {
-                    context['on' + name] = null;
-                }
+                $(context).unbind(name, events[name]);
+                
+                //if (context.removeEventListener) {
+                //    context.removeEventListener(name, events[name], false);
+                //} else {
+                //    context['on' + name] = null;
+                //}
             }
         }
     };
@@ -57,16 +60,20 @@
         }
     };
     
+    $.fn.extend({
+        touchwheel: function (fn) {
+            return fn ? this.bind("touchwheel", fn) : this.trigger("touchwheel");
+        }
+    });
+    
     function startHandler(event) {
-        if (event.pointerType === 'touch' || (event.touches && event.touches.length === 1)) {
-            console.log('Touch Start Fired');
-
+        if (event.type == (navigator.msPointerEnabled ? 'mspointerdown' : 'touchstart')) {
             event.preventDefault();
             touchStart = {
                 deltaX: event.pageX,
                 deltaY: event.pageY
             };
-
+            
             eventHelper.setup(touch.move, this);
             eventHelper.setup(touch.end, this);
         }
@@ -75,14 +82,13 @@
     function moveHandler(event) {
         event.preventDefault();
         
-        var orgEvent = event.touches ? event.touches[0] : event;
+        var orgEvent = event.originalEvent.touches ? event.originalEvent.touches[0] : event.originalEvent;
         var dragEvent = $.event.fix(orgEvent);
         
         $.extend(dragEvent, {
-            deltaX: (touchStart.deltaX - orgEvent.pageX),
-            deltaY: (touchStart.deltaY - orgEvent.pageY),
+            deltaX: (touchStart.deltaX - orgEvent.pageX) || 0,
+            deltaY: (touchStart.deltaY - orgEvent.pageY) || 0,
             type: 'touchwheel',
-            isSurfaceTablet: isSurfaceTablet,
             touchScroll: true
         });
         
@@ -92,7 +98,8 @@
         return ($.event.dispatch || $.event.handle).call(this, dragEvent);
     }
     
-    function endHandler() {
+    function endHandler(event) {
+        event.preventDefault();
         eventHelper.teardown(touch.move, this);
         eventHelper.teardown(touch.end, this);
     }
